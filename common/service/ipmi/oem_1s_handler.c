@@ -280,6 +280,14 @@ __weak void OEM_1S_FW_UPDATE(ipmi_msg *msg)
 	return;
 }
 
+static const uint8_t firmware_component_to_sensor_index[COMPNT_MAX] = {
+	[COMPNT_PVCCIN] = SENSOR_NUM_VOL_PVCCIN,
+	[COMPNT_PVCCFA_EHV_FIVRA] = SENSOR_NUM_VOL_PVCCFA_EHV_FIVRA,
+	[COMPNT_PVCCD_HV] = SENSOR_NUM_VOL_PVCCD_HV,
+	[COMPNT_PVCCINFAON] = SENSOR_NUM_VOL_PVCCINFAON,
+	[COMPNT_PVCCFA_EHV] = SENSOR_NUM_VOL_PVCCFA_EHV,
+};
+
 __weak void OEM_1S_GET_FW_VERSION(ipmi_msg *msg)
 {
 	if (msg == NULL) {
@@ -291,8 +299,8 @@ __weak void OEM_1S_GET_FW_VERSION(ipmi_msg *msg)
 		return;
 	}
 
-	uint8_t component;
-	component = msg->data[0];
+	uint8_t component = msg->data[0];
+	uint8_t sensor_index = firmware_component_to_sensor_index[component];
 #if MAX_IPMB_IDX
 	ipmb_error status;
 	ipmi_msg *bridge_msg;
@@ -356,18 +364,15 @@ __weak void OEM_1S_GET_FW_VERSION(ipmi_msg *msg)
 	case COMPNT_PVCCD_HV:
 	case COMPNT_PVCCINFAON:
 	case COMPNT_PVCCFA_EHV:
-		if ((component == COMPNT_PVCCIN) || (component == COMPNT_PVCCFA_EHV_FIVRA)) {
-			i2c_msg.target_addr = PVCCIN_ADDR;
+		if (!sensor_index) {
+			printf("Firmware component %d sensor index undefined\n", component);
+			break;
 		}
-		if (component == COMPNT_PVCCD_HV) {
-			i2c_msg.target_addr = PVCCD_HV_ADDR;
-		}
-		if ((component == COMPNT_PVCCINFAON) || (component == COMPNT_PVCCFA_EHV)) {
-			i2c_msg.target_addr = PVCCFA_EHV_ADDR;
-		}
+
+		i2c_msg.bus = sensor_config[sensor_index].port;
+		i2c_msg.target_addr = sensor_config[sensor_index].target_addr;
 		i2c_msg.tx_len = 1;
 		i2c_msg.rx_len = 7;
-		i2c_msg.bus = I2C_BUS5;
 		i2c_msg.data[0] = PMBUS_IC_DEVICE_ID;
 
 		if (i2c_master_read(&i2c_msg, retry)) {
